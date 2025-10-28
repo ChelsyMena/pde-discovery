@@ -79,13 +79,13 @@ ks_stepper = jax.jit(ks_stepper)
 
 # Initial Conditions
 #u_0 = 0.5*jnp.sin(16 * jnp.pi * mesh / DOMAIN_SIZE) # 1-low noise sigma
-u_0 = 0.5 * jnp.sin(16 * jnp.pi * mesh / DOMAIN_SIZE) #9-low
+#u_0 = 0.5 * jnp.sin(16 * jnp.pi * mesh / DOMAIN_SIZE) #9-low
 #u_0 = jnp.sin(16 * jnp.pi * mesh / DOMAIN_SIZE)/10 #10-low works w sindy
 #u_0 = 0.5*jnp.exp(-100 * (mesh - DOMAIN_SIZE / 2)**2) #2 hi noise
 #u_0 = jnp.sin(2 * jnp.pi * mesh / DOMAIN_SIZE) + 0.5 * jnp.sin(4 * jnp.pi * mesh / DOMAIN_SIZE) + 0.25 * jnp.sin(8 * jnp.pi * mesh / DOMAIN_SIZE)
 #u_0 = jnp.where(mesh < DOMAIN_SIZE / 2, 1.0, -1.0) #3hi noise
 #u_0 = 0.25 * jnp.sin(64 * jnp.pi * mesh / DOMAIN_SIZE) #4-hi
-#u_0 = jnp.cos(3 * jnp.pi * mesh / DOMAIN_SIZE + 0.3)/10 #5-hi / 8-low
+u_0 = jnp.cos(3 * jnp.pi * mesh / DOMAIN_SIZE + 0.3)/10 #5-hi / 8-low
 
 #u_0 = 0.5 * jnp.exp(-100 * (mesh - DOMAIN_SIZE / 2)**2)  #Neurips 6, 7 when added noise w sigma
 
@@ -103,7 +103,7 @@ trj = jnp.stack(trj)
 x = jnp.linspace(0.0, DOMAIN_SIZE, N_DOF, endpoint=False)
 t = jnp.arange(trj.shape[0]) * DT
 
-with h5py.File(f"perturbed/9_data_noiseless.h5", "w") as f:
+with h5py.File(f"perturbed/8_data_noiseless.h5", "w") as f:
 	f.create_dataset("u", data=trj)
 	f.create_dataset("x", data=x)
 	f.create_dataset("t", data=t)

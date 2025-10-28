@@ -3,11 +3,11 @@ import numpy as np
 import matplotlib.pyplot as plt
 from sklearn.linear_model import Ridge
 
-with h5py.File("perturbed/8_data_concatenated_20s.h5", "r") as f:
+with h5py.File("perturbed/8_data_noiseless.h5", "r") as f:
     u_data = f["u"][:]
-    x = f["x"][:]
-    t = f["t"][:]
-    dt = f.attrs["dt"]
+    x = [i for i in range(f["u"].shape[1])] #f["x"][:] 
+    t = [i for i in range(f["u"].shape[0])] #f["t"][:]
+    dt = 0.1 #f.attrs["dt"]
 
 n_train = min(5000, len(u_data))
 u_train = u_data[:n_train, :]
@@ -334,6 +334,6 @@ axes[2].set_ylabel("Space", fontsize=12)
 plt.colorbar(im3, ax=axes[2], label="Error")
 
 plt.tight_layout()
-plt.savefig("sindy_ks_discovered.png", dpi=300, bbox_inches='tight')
-print(f"\nSaved: sindy_ks_discovered.png")
+#plt.savefig("sindy_ks_discovered.png", dpi=300, bbox_inches='tight')
+#print(f"\nSaved: sindy_ks_discovered.png")
 plt.show()

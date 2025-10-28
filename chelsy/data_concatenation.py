@@ -10,7 +10,7 @@ files = glob.glob(data_folder + "*.h5")
 
 # Plot Baseline Data
 
-with h5py.File("perturbed/9_data_noiseless.h5", "r") as f:
+with h5py.File("perturbed/10_data_noiseless.h5", "r") as f:
 	u = f["u"][:]
 
 	trj = jnp.stack(u)
@@ -26,7 +26,7 @@ with h5py.File("perturbed/9_data_noiseless.h5", "r") as f:
 	plt.xlabel("Time")
 	plt.ylabel("Space")
 	plt.title("Original Data, No Noise")
-	plt.savefig("figures/9_noiseless.png", dpi=300)
+	plt.savefig("figures/10_noiseless.png", dpi=300)
 	#plt.show()
 	plt.close()
 
@@ -75,7 +75,7 @@ plt.colorbar(label="u")
 plt.xlabel("Time")
 plt.ylabel("Space")
 plt.title("Concatenated Data, every 1 steps")
-plt.savefig("figures/9_spliced.png", dpi=300)
+plt.savefig("figures/10_spliced.png", dpi=300)
 #plt.show()
 plt.close()
 
@@ -93,7 +93,7 @@ plt.colorbar(label="u")
 plt.xlabel("Time")
 plt.ylabel("Space")
 plt.title("Concatenated Data, every 10 steps")
-plt.savefig("figures/9_spliced10s.png", dpi=300)
+plt.savefig("figures/10_spliced10s.png", dpi=300)
 #plt.show()
 plt.close()
 
@@ -111,7 +111,7 @@ plt.colorbar(label="u")
 plt.xlabel("Time")
 plt.ylabel("Space")
 plt.title("Concatenated Data, every 20 steps")
-plt.savefig("figures/9_spliced20s.png", dpi=300)
+plt.savefig("figures/10_spliced20s.png", dpi=300)
 #plt.show()
 plt.close()
 
@@ -136,13 +136,13 @@ for i in [0, 1000, 1999]:
 		plt.xlabel("time")
 		plt.ylabel("space")
 		plt.title(f"Original Data with Noise, {i+1} iteration")
-		plt.savefig(fr"figures/9_perturbed_data_{i}.png", dpi=300)
+		plt.savefig(fr"figures/10_perturbed_data_{i}.png", dpi=300)
 		#plt.show()
 		plt.close()
 
 # Plot first frame of the  noiseless and perturbation in 1D 
 comparison = []
-with h5py.File(fr'perturbed\\9_data_noiseless.h5', "r") as f:
+with h5py.File(fr'perturbed\\10_data_noiseless.h5', "r") as f:
 	u = f["u"][:]
 	x = f["x"][:]
 	comparison.append(u[0, :]) #,x, t))
@@ -161,12 +161,12 @@ with h5py.File(fr'perturbed\\sims\\data_0.h5', "r") as f:
 	plt.title("Initial Condition with and without Noise")
 	plt.legend()
 	plt.grid()
-	plt.savefig("figures/9_noise_visualization.png", dpi=300)
+	plt.savefig("figures/10_noise_visualization.png", dpi=300)
 	#plt.show()
 	plt.close()
 
 # Save concatenated data
-with h5py.File(f"perturbed/9_data_concatenated.h5", "w") as f:
+with h5py.File(f"perturbed/10_data_concatenated.h5", "w") as f:
 	f.create_dataset("u", data=jnp.stack([data for data in perturbed_data]))
 	f.create_dataset("x", data=x)
 	t_concatenated = jnp.arange(jnp.stack([data for data in perturbed_data]).shape[0]) * 0.1
@@ -177,7 +177,7 @@ with h5py.File(f"perturbed/9_data_concatenated.h5", "w") as f:
 	f.attrs["dt"] = 0.1
 	f.attrs["n_steps"] = jnp.stack([data for data in perturbed_data]).shape[0]
 
-with h5py.File(f"perturbed/9_data_concatenated_10s.h5", "w") as f:
+with h5py.File(f"perturbed/10_data_concatenated_10s.h5", "w") as f:
 	f.create_dataset("u", data=jnp.stack([data for data in perturbed_data_10s]))
 	f.create_dataset("x", data=x)
 	t_concatenated = jnp.arange(jnp.stack([data for data in perturbed_data_10s]).shape[0]) * 0.1
@@ -188,7 +188,7 @@ with h5py.File(f"perturbed/9_data_concatenated_10s.h5", "w") as f:
 	f.attrs["dt"] = 0.1
 	f.attrs["n_steps"] = jnp.stack([data for data in perturbed_data_10s]).shape[0]
 
-with h5py.File(f"perturbed/9_data_concatenated_20s.h5", "w") as f:
+with h5py.File(f"perturbed/10_data_concatenated_20s.h5", "w") as f:
 	f.create_dataset("u", data=jnp.stack([data for data in perturbed_data_20s]))
 	f.create_dataset("x", data=x)
 	t_concatenated = jnp.arange(jnp.stack([data for data in perturbed_data_20s]).shape[0]) * 0.1
