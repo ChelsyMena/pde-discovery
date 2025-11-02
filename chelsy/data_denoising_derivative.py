@@ -1,13 +1,13 @@
-import jax
+#import jax
 import jax.numpy as jnp
 import numpy as np
 import matplotlib.pyplot as plt
 import h5py
-from scipy.signal import correlate
+#from scipy.signal import correlate
 
-filename = "8_data_noisy"
+filename = "2_noisy"
 
-with h5py.File(f"perturbed/{filename}.h5", "r") as f:
+with h5py.File(f"data/{filename}.h5", "r") as f:
 	u = f["u"][:]
 
 new_u = u[0:1,:]
@@ -39,10 +39,10 @@ for dt in range(1, len(u)):
 	# new_u = jnp.vstack([new_u, u_corrected[None, :]])
 
 # save denoised data
-with h5py.File(f"perturbed/{filename}_denoised.h5", "w") as f:
+with h5py.File(f"data/{filename}_denoised.h5", "w") as f:
 	f.create_dataset("u", data=new_u)
 
-# plot original data and denosed data
+# plot original data and denoised data
 plt.figure(figsize=(20, 15))
 plt.subplot(3, 1, 1)
 plt.imshow(u.T, aspect='auto', cmap='RdBu')
@@ -57,4 +57,5 @@ plt.subplot(3, 1, 3)
 plt.imshow((u-new_u).T, aspect='auto', cmap='RdBu')
 plt.title("Difference")
 plt.tight_layout()
+plt.savefig(f"figures/{filename}_denoising.png")
 plt.show()

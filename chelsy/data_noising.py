@@ -5,7 +5,7 @@ import h5py
 import matplotlib.pyplot as plt
 
 trj = None
-with h5py.File("perturbed/8_data_noiseless.h5", "r") as f:
+with h5py.File("data/2_noiseless.h5", "r") as f:
 	u = f["u"][:]
 
 	u_new = []
@@ -26,7 +26,7 @@ with h5py.File("perturbed/8_data_noiseless.h5", "r") as f:
 	trj_simple = trj3.copy()
 
 # save noisy data
-with h5py.File(f"perturbed/8_data_noisy.h5", "w") as f:
+with h5py.File(f"data/2_noisy.h5", "w") as f:
 	f.create_dataset("u", data=trj)
 	# f.create_dataset("x", data=f["x"][:])
 	# f.create_dataset("t", data=f["t"][:])
@@ -36,7 +36,7 @@ with h5py.File(f"perturbed/8_data_noisy.h5", "w") as f:
 	# f.attrs["dt"] = f.attrs["dt"]
 	# f.attrs["n_steps"] = trj.shape[0]
 
-with h5py.File(f"perturbed/8_data_simpletraslating.h5", "w") as f:
+with h5py.File(f"data/2_translated.h5", "w") as f:
 	f.create_dataset("u", data=trj_simple)
 
 #Plot noisy data
@@ -52,6 +52,6 @@ plt.colorbar(label="u")
 plt.xlabel("Time")
 plt.ylabel("Space")
 plt.title("Original Data, Translation and different Noise in each dt")
-plt.savefig("figures/8_noisy.png", dpi=300)
+plt.savefig("figures/2_noisy.png", dpi=300)
 #plt.show()
 plt.close()

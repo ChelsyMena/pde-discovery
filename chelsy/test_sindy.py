@@ -1,18 +1,22 @@
 import h5py
 import numpy as np
 import matplotlib.pyplot as plt
-from sklearn.linear_model import Ridge
+from sklearn.linear_model import Ridge, LassoCV
+from sklearn.preprocessing import StandardScaler
 
-with h5py.File("perturbed/8_data_noiseless.h5", "r") as f:
+filename = "1_translated_denoised"
+
+with h5py.File(f"data/{filename}.h5", "r") as f:
     u_data = f["u"][:]
     x = [i for i in range(f["u"].shape[1])] #f["x"][:] 
     t = [i for i in range(f["u"].shape[0])] #f["t"][:]
     dt = 0.1 #f.attrs["dt"]
+    dx = 100/200
 
 n_train = min(5000, len(u_data))
 u_train = u_data[:n_train, :]
 t_train = t[:n_train]
-
+#%%
 print(f"\nTraining data size: {u_train.shape}")
 print(f"Time range: {t_train[0]:.1f} - {t_train[-1]:.1f}")
 
@@ -28,8 +32,9 @@ def spectral_derivative(u, dx, order=1):
     u_der = np.fft.ifft(u_der_hat, axis=-1).real
     return u_der
 
-dx = x[1] - x[0]
-dt_train = t_train[1] - t_train[0]
+#dx = x[1] - x[0]
+#dt_train = t_train[1] - t_train[0]
+dt_train = 0.1
 
 u_dot = np.zeros_like(u_train)
 u_dot[1:-1] = (u_train[2:] - u_train[:-2]) / (2 * dt_train)
@@ -75,6 +80,62 @@ print(f"Feature matrix shape: {X.shape}")
 print(f"Number of candidate terms: {len(features_dict)}")
 print(f"Candidate terms: {list(features_dict.keys())}")
 
+# --- Build finite-difference (FD) derivative features for comparison ---
+u_x_fd = (np.roll(u_train, -1, axis=1) - np.roll(u_train, 1, axis=1)) / (2 * dx)
+u_xx_fd = (np.roll(u_train, -1, axis=1) - 2 * u_train + np.roll(u_train, 1, axis=1)) / (dx**2)
+u_xxx_fd = (np.roll(u_xx_fd, -1, axis=1) - np.roll(u_xx_fd, 1, axis=1)) / (2 * dx)
+u_xxxx_fd = (np.roll(u_xx_fd, -1, axis=1) - 2 * u_xx_fd + np.roll(u_xx_fd, 1, axis=1)) / (dx**2)
+u_xxxxx_fd = (np.roll(u_xxxx_fd, -1, axis=1) - np.roll(u_xxxx_fd, 1, axis=1)) / (2 * dx)
+u_xxxxxx_fd = (np.roll(u_xxxx_fd, -1, axis=1) - 2 * u_xxxx_fd + np.roll(u_xxxx_fd, 1, axis=1)) / (dx**2)
+
+u_squared_fd = u_train**2
+u_cubed_fd = u_train**3
+u_squared_x_fd = (np.roll(u_squared_fd, -1, axis=1) - np.roll(u_squared_fd, 1, axis=1)) / (2 * dx)
+u_squared_xx_fd = (np.roll(u_squared_fd, -1, axis=1) - 2 * u_squared_fd + np.roll(u_squared_fd, 1, axis=1)) / (dx**2)
+u_cubed_x_fd = (np.roll(u_cubed_fd, -1, axis=1) - np.roll(u_cubed_fd, 1, axis=1)) / (2 * dx)
+u_u_x_fd = u_train * u_x_fd
+u_u_xx_fd = u_train * u_xx_fd
+
+features_dict_fd = {
+    'u': u_train.flatten(),
+    'u_x': u_x_fd.flatten(),
+    'u_xx': u_xx_fd.flatten(),
+    'u_xxx': u_xxx_fd.flatten(),
+    'u_xxxx': u_xxxx_fd.flatten(),
+    'u_xxxxx': u_xxxxx_fd.flatten(),
+    'u_xxxxxx': u_xxxxxx_fd.flatten(),
+    'u²': u_squared_fd.flatten(),
+    'u³': u_cubed_fd.flatten(),
+    '(u²)_x': u_squared_x_fd.flatten(),
+    '(u²)_xx': u_squared_xx_fd.flatten(),
+    '(u³)_x': u_cubed_x_fd.flatten(),
+    'u·u_x': u_u_x_fd.flatten(),
+    'u·u_xx': u_u_xx_fd.flatten(),
+}
+
+X_fd = np.column_stack([features_dict_fd[key] for key in features_dict_fd.keys()])
+
+# expose feature names and ground-truth key terms for L1 evaluation
+feature_names = list(features_dict.keys())
+# ground truth: prefer the (u^2)_x term name used in the feature library
+key_terms = {'u_xx': -1.0, 'u_xxxx': -1.0, '(u²)_x': -0.5}
+
+
+def compute_l1(coef, key_terms, feature_names):
+    """Compute L1 norm between discovered coefficients and ground-truth key terms.
+
+    If a key term is not present in feature_names, its discovered coef is treated as 0.
+    """
+    l1 = 0.0
+    for name, expected in key_terms.items():
+        if name in feature_names:
+            idx = feature_names.index(name)
+            discovered = coef[idx]
+        else:
+            discovered = 0.0
+        l1 += abs(discovered - expected)
+    return l1
+
 # Training with different methods
 print("\n" + "="*80)
 print("COMPARING DIFFERENT METHODS")
@@ -82,97 +143,181 @@ print("="*80)
 
 results = []
 
-# Method 1: Ordinary least squares
-print("\n1. Ordinary Least Squares:")
-coef_ols = np.linalg.lstsq(X, y, rcond=None)[0]
-y_pred_ols = X @ coef_ols
-rmse_ols = np.sqrt(np.mean((y - y_pred_ols)**2))
-n_nonzero_ols = np.sum(np.abs(coef_ols) > 1e-6)
-print(f"   RMSE: {rmse_ols:.6f}, Non-zero terms: {n_nonzero_ols}")
-results.append(('OLS', coef_ols, rmse_ols))
+# --- scale features and target (StandardScaler) for both spectral and FD features ---
+X_scaler_spec = StandardScaler()
+X_scaler_fd = StandardScaler()
+yscaler = StandardScaler()
 
-# Method 2: Ridge regression (different alphas)
-print("\n2. Ridge Regression:")
-for alpha in [0.001, 0.01, 0.1, 1.0]:
-    ridge = Ridge(alpha=alpha)
-    coef_ridge = ridge.fit(X, y).coef_
-    y_pred_ridge = X @ coef_ridge
-    rmse_ridge = np.sqrt(np.mean((y - y_pred_ridge)**2))
-    n_nonzero = np.sum(np.abs(coef_ridge) > 1e-6)
-    print(f"   Alpha={alpha}: RMSE={rmse_ridge:.6f}, Non-zero terms={n_nonzero}")
-    results.append((f'Ridge(α={alpha})', coef_ridge, rmse_ridge))
+# fit scalers
+Xs_spec = X_scaler_spec.fit_transform(X)
+Xs_fd = X_scaler_fd.fit_transform(X_fd)
+ys = yscaler.fit_transform(y.reshape(-1, 1)).ravel()
 
-# Method 3: STLSQ with different thresholds
-print("\n3. STLSQ (Sequential Thresholded Least Squares):")
-for threshold in [0.001, 0.01, 0.05, 0.1, 0.2]:
-    coef = np.linalg.lstsq(X, y, rcond=None)[0]
-    
-    for iteration in range(20):
-        mask = np.abs(coef) > threshold
-        if np.sum(mask) == 0:
-            coef = np.zeros_like(coef)
-            break
-            
-        X_masked = X[:, mask]
-        coef_masked = np.linalg.lstsq(X_masked, y, rcond=None)[0]
-        
-        coef_new = np.zeros_like(coef)
-        coef_new[mask] = coef_masked
-        
-        if np.allclose(coef, coef_new, atol=1e-8):
-            break
-        coef = coef_new
-    
-    y_pred = X @ coef
-    rmse = np.sqrt(np.mean((y - y_pred)**2))
-    n_terms = np.sum(np.abs(coef) > 1e-10)
-    print(f"   Threshold={threshold}: RMSE={rmse:.6f}, terms={n_terms}")
-    results.append((f'STLSQ(τ={threshold})', coef, rmse))
+# store scaler params for unscaling coefficients later
+X_mean_spec = X_scaler_spec.mean_
+X_scale_spec = X_scaler_spec.scale_
+X_mean_fd = X_scaler_fd.mean_
+X_scale_fd = X_scaler_fd.scale_
+y_mean = yscaler.mean_[0]
+y_scale = yscaler.scale_[0]
+
+# datasets to evaluate: (label, original X, scaled Xs, X_mean, X_scale)
+datasets = [
+    ('Spectral', X, Xs_spec, X_mean_spec, X_scale_spec),
+    ('FD', X_fd, Xs_fd, X_mean_fd, X_scale_fd),
+]
+
+rcond_values = [None, 1e-15, 1e-12, 1e-10, 1e-8, 1e-6, 1e-4, 1e-2]
+alphas = [0.001, 0.01, 0.1, 1.0]
+thresholds = [0.001, 0.01, 0.05, 0.1, 0.2]
+
+for ds_name, X_orig, Xs_ds, X_mean_ds, X_scale_ds in datasets:
+    print(f"\n---- Running methods on {ds_name} features ----")
+
+    # OLS grid over rcond
+    print("\nOLS (varying rcond):")
+    for r in rcond_values:
+        if r is None:
+            coef_s = np.linalg.lstsq(Xs_ds, ys, rcond=None)[0]
+        else:
+            coef_s = np.dot(np.linalg.pinv(Xs_ds, rcond=r), ys)
+
+        coef = coef_s * (y_scale / X_scale_ds)
+        intercept = y_mean - np.dot(X_mean_ds, coef)
+
+        y_pred = X_orig @ coef + intercept
+        rmse = np.sqrt(np.mean((y - y_pred) ** 2))
+        n_nonzero = np.sum(np.abs(coef) > 1e-6)
+        l1 = compute_l1(coef, key_terms, feature_names)
+        print(f"  {ds_name} rcond={r}: RMSE={rmse:.6e}, L1={l1:.6e}, nonzero={n_nonzero}")
+        results.append((f'OLS({ds_name}, rcond={str(r)})', coef, rmse, l1, intercept))
+
+    # Ridge alphas
+    print("\nRidge (varying alpha):")
+    for alpha in alphas:
+        ridge = Ridge(alpha=alpha, fit_intercept=False)
+        coef_s_ridge = ridge.fit(Xs_ds, ys).coef_
+
+        coef_ridge = coef_s_ridge * (y_scale / X_scale_ds)
+        intercept = y_mean - np.dot(X_mean_ds, coef_ridge)
+
+        y_pred_ridge = X_orig @ coef_ridge + intercept
+        rmse_ridge = np.sqrt(np.mean((y - y_pred_ridge) ** 2))
+        n_nonzero = np.sum(np.abs(coef_ridge) > 1e-6)
+        l1 = compute_l1(coef_ridge, key_terms, feature_names)
+        print(f"  {ds_name} Alpha={alpha}: RMSE={rmse_ridge:.6f}, L1={l1:.6e}, Non-zero terms={n_nonzero}")
+        results.append((f'Ridge({ds_name}, α={alpha})', coef_ridge, rmse_ridge, l1, intercept))
+
+    # Adaptive Lasso (iterative reweighted Lasso)
+    print("\nAdaptive Lasso (reweighted Lasso):")
+    try:
+        # initial estimator (use LassoCV first; fallback to Ridge if needed)
+        try:
+            init = LassoCV(cv=5, fit_intercept=False, n_jobs=-1, max_iter=5000).fit(Xs_ds, ys)
+            coef_init_s = init.coef_
+            init_alpha = init.alpha_
+        except Exception:
+            # fallback to tiny Ridge for initial weights
+            init_alpha = None
+            coef_init_s = Ridge(alpha=1e-6, fit_intercept=False).fit(Xs_ds, ys).coef_
+
+        # adaptive weights: 1 / (|beta_init| + eps)^gamma
+        eps = 1e-6
+        gamma = 1.0
+        weights = 1.0 / (np.abs(coef_init_s) + eps) ** gamma
+
+        # weight the design matrix columns (divide columns by weights)
+        Xs_weighted = Xs_ds / weights[np.newaxis, :]
+
+        # fit Lasso on weighted data
+        lasso_w = LassoCV(cv=5, fit_intercept=False, n_jobs=-1, max_iter=5000)
+        coef_s_w = lasso_w.fit(Xs_weighted, ys).coef_
+
+        # recover scaled coefficients for original (unweighted) problem
+        coef_s_adaptive = coef_s_w / weights
+
+        # unscale to original units
+        coef_adaptive = coef_s_adaptive * (y_scale / X_scale_ds)
+        intercept = y_mean - np.dot(X_mean_ds, coef_adaptive)
+
+        y_pred_adaptive = X_orig @ coef_adaptive + intercept
+        rmse_adaptive = np.sqrt(np.mean((y - y_pred_adaptive) ** 2))
+        n_nonzero = np.sum(np.abs(coef_adaptive) > 1e-6)
+        l1 = compute_l1(coef_adaptive, key_terms, feature_names)
+        print(f"  {ds_name} AdaptiveLasso: RMSE={rmse_adaptive:.6f}, L1={l1:.6e}, Non-zero terms={n_nonzero}, init_alpha={init_alpha}")
+        results.append((f'AdaptiveLasso({ds_name})', coef_adaptive, rmse_adaptive, l1, intercept))
+    except Exception as e:
+        print(f"  {ds_name} AdaptiveLasso failed: {e}")
+
+    # STLSQ thresholds
+    print("\nSTLSQ (thresholding):")
+    for threshold in thresholds:
+        coef_s = np.linalg.lstsq(Xs_ds, ys, rcond=None)[0]
+
+        for iteration in range(20):
+            mask = np.abs(coef_s) > threshold
+            if np.sum(mask) == 0:
+                coef_s = np.zeros_like(coef_s)
+                break
+
+            Xs_masked = Xs_ds[:, mask]
+            coef_s_masked = np.linalg.lstsq(Xs_masked, ys, rcond=None)[0]
+
+            coef_s_new = np.zeros_like(coef_s)
+            coef_s_new[mask] = coef_s_masked
+
+            if np.allclose(coef_s, coef_s_new, atol=1e-8):
+                break
+            coef_s = coef_s_new
+
+        coef = coef_s * (y_scale / X_scale_ds)
+        intercept = y_mean - np.dot(X_mean_ds, coef)
+
+        y_pred = X_orig @ coef + intercept
+        rmse = np.sqrt(np.mean((y - y_pred) ** 2))
+        n_terms = np.sum(np.abs(coef) > 1e-10)
+        l1 = compute_l1(coef, key_terms, feature_names)
+        print(f"  {ds_name} Threshold={threshold}: RMSE={rmse:.6f}, L1={l1:.6e}, terms={n_terms}")
+        results.append((f'STLSQ({ds_name}, τ={threshold})', coef, rmse, l1, intercept))
 
 # Select best model - PREFER SPARSE MODELS
 print("\n" + "="*80)
 print("SELECTING BEST MODEL...")
 print("="*80)
 
-# Sort by RMSE
-results.sort(key=lambda x: x[2])
+# Sort by L1 (sum absolute error on key terms)
+results.sort(key=lambda x: x[3])
 
-# Show top 5 models
-print("\nTop 5 models by RMSE:")
-for i, (name, coef, rmse) in enumerate(results[:5]):
+# Show top 5 models by L1
+print("\nTop 5 models by L1 (sum abs error on key terms):")
+for i, (name, coef, rmse, l1, *_rest) in enumerate(results[:5]):
     n_terms = np.sum(np.abs(coef) > 1e-10)
-    print(f"{i+1}. {name:<25} RMSE={rmse:.6f}, terms={n_terms}")
+    print(f"{i+1}. {name:<25} L1={l1:.6e}, RMSE={rmse:.6f}, terms={n_terms}")
 
-# MANUALLY SELECT BEST STLSQ MODEL (sparse and accurate)
+## SMART MODEL SELECTION: minimize objective = L1 + lambda_sparsity * n_terms
 print("\n" + "="*80)
-print("SMART MODEL SELECTION (prefer sparse models):")
+print("SMART MODEL SELECTION (objective = L1 + lambda * n_terms):")
 print("="*80)
 
-best_name, best_coef, best_rmse = None, None, None
+# tunable sparsity penalty (change as desired)
+lambda_sparsity = 0.1
 
-# First, try to find STLSQ model with 3-6 terms
-for name, coef, rmse in results:
-    if 'STLSQ' in name:
-        n_terms = np.sum(np.abs(coef) > 1e-10)
-        if 3 <= n_terms <= 6 and rmse < 0.01:  # Want sparse and accurate
-            best_name, best_coef, best_rmse = name, coef, rmse
-            print(f"✓ Selected: {name} with {n_terms} terms (RMSE={rmse:.6f})")
-            break
+# compute objective for all results
+scored = []
+for (name, coef, rmse, l1, intercept) in results:
+    n_terms = int(np.sum(np.abs(coef) > 1e-10))
+    objective = l1 + lambda_sparsity * n_terms
+    scored.append((name, coef, rmse, l1, intercept, n_terms, objective))
 
-# If no good STLSQ found, use STLSQ with threshold 0.05
-if best_name is None:
-    for name, coef, rmse in results:
-        if 'STLSQ(τ=0.05)' in name or 'STLSQ(τ=0.1)' in name:
-            best_name, best_coef, best_rmse = name, coef, rmse
-            n_terms = np.sum(np.abs(coef) > 1e-10)
-            print(f"✓ Selected: {name} with {n_terms} terms (RMSE={rmse:.6f})")
-            break
+# show top 5 by objective
+scored.sort(key=lambda x: x[6])
+print("\nTop 5 models by objective (L1 + lambda*n_terms):")
+for i, (name, coef, rmse, l1, intercept, n_terms, obj) in enumerate(scored[:5]):
+    print(f"{i+1}. {name:<30} objective={obj:.6e}, L1={l1:.6e}, terms={n_terms}, RMSE={rmse:.6f}")
 
-# Fallback to best RMSE if nothing else works
-if best_name is None:
-    best_name, best_coef, best_rmse = results[0]
-    print(f"⚠ Fallback to: {best_name}")
-
+# choose best by objective
+best_name, best_coef, best_rmse, best_l1, best_intercept, best_n_terms, best_obj = scored[0]
+print(f"\n✓ Selected by objective: {best_name} (objective={best_obj:.6e}, L1={best_l1:.6e}, terms={best_n_terms}, RMSE={best_rmse:.6f})")
 print(f"\n{'='*80}")
 print(f"FINAL SELECTED MODEL: {best_name}")
 print(f"{'='*80}")
@@ -279,11 +424,11 @@ def simulate_discovered_equation(u0, t_sim, coef, feature_names, dx, dt):
         
         trajectory.append(u.copy())
         
-        if step % 100 == 0:
-            max_val = np.max(np.abs(u))
-            if max_val > 10 or np.any(np.isnan(u)):
-                print(f"  ⚠ Instability detected at step {step}, max_val={max_val:.2f}")
-                break
+        # if step % 100 == 0:
+        #     max_val = np.max(np.abs(u))
+        #     if max_val > 10 or np.any(np.isnan(u)):
+        #         print(f"  ⚠ Instability detected at step {step}, max_val={max_val:.2f}")
+        #         break
     
     return np.array(trajectory)
 
@@ -300,7 +445,7 @@ print(f"Simulation completed: {len(u_pred_sim)} steps")
 # Visualization - ПРАВИЛЬНО показати індекси зрізів
 fig, axes = plt.subplots(3, 1, figsize=(16, 12))
 
-vmin, vmax = -2, 2
+vmin, vmax = -3, 3
 
 im1 = axes[0].imshow(
     u_train_cut.T, cmap="RdBu", aspect="auto", origin="lower",
@@ -328,12 +473,12 @@ im3 = axes[2].imshow(
     extent=(0, len(t_train_cut)-1, x[0], x[-1]), vmin=-max_err, vmax=max_err
 )
 rmse_final = np.sqrt(np.mean(error**2))
-axes[2].set_title(f"Error (RMSE={rmse_final:.4f})", fontsize=15, fontweight='bold')
+axes[2].set_title(f"Error (L1 = {best_l1:.4f}, RMSE={rmse_final:.4f})", fontsize=15, fontweight='bold')
 axes[2].set_xlabel("Time Snapshot Index", fontsize=12)
 axes[2].set_ylabel("Space", fontsize=12)
 plt.colorbar(im3, ax=axes[2], label="Error")
 
 plt.tight_layout()
-#plt.savefig("sindy_ks_discovered.png", dpi=300, bbox_inches='tight')
+plt.savefig(f"figures/{filename}_sindy.png", dpi=300, bbox_inches='tight')
 #print(f"\nSaved: sindy_ks_discovered.png")
 plt.show()
