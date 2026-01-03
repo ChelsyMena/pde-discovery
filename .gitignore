@@ -1,6 +1,13 @@
-chelsy/perturbed/sims/*
+chelsy/data/sims/*
 *.h5
 *.png
 *.pdf
 *.pptx
 *.tif
+*.csv
+*.pt
+PDE-LEARN-main
+Saves/*
+Data/DataSets/*
+Figures/*
+*__pycache__/

@@ -1,8 +1,9 @@
 import jax
 import jax.numpy as jnp
 import numpy as np
-import matplotlib.pyplot as plt
 import h5py
+
+u0_idx = 2
 
 def perturb_spectral_shift(
     trj: jnp.ndarray,
@@ -62,7 +63,8 @@ def perturb_spatial_roll(
     return trj_perturbed, shifts_px
 
 # Run it
-with h5py.File('test_solving_euler_ks.h5', 'r') as f:
+
+with h5py.File(f'data/{u0_idx}_noiseless.h5', 'r') as f:
     trj = jnp.array(f['u'][:])
     x = jnp.array(f['x'][:])
     t = jnp.array(f['t'][:])
@@ -86,14 +88,14 @@ trj_pert2, shifts2 = perturb_spatial_roll(
 )
 
 # save
-with h5py.File('test_solving_euler_ks_perturbed.h5', 'w') as f:
+with h5py.File(f'data/{u0_idx}_spectral.h5', 'w') as f:
     # Original data
     f.create_dataset('u', data=trj_pert1)
     #f.create_dataset('u_original', data=trj)  # Дублюємо для сумісності
     f.create_dataset('x', data=x)
     f.create_dataset('t', data=t)
     
-with h5py.File('test_solving_euler_ks_perturbed.h5', 'w') as f:
+with h5py.File(f'data/{u0_idx}_roll.h5', 'w') as f:
     # Original data
     f.create_dataset('u', data=trj_pert2)
     #f.create_dataset('u_original', data=trj)  # Дублюємо для сумісності

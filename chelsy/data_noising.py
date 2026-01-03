@@ -4,30 +4,35 @@ import jax.numpy as jnp
 import h5py
 import matplotlib.pyplot as plt
 
+u0_idx = 2
 trj = None
-with h5py.File("data/2_noiseless.h5", "r") as f:
-	u = f["u"][:]
+#noise_level = 0.05
 
-	u_new = []
-	u_simple_new = []
-	for dt in u:
-		new = dt + 0.05*jnp.std(dt)*jax.random.normal(jax.random.PRNGKey(0),shape=dt.shape)
-		n_index = np.random.randint(0, 15) #dt.shape[0])
-		new = jnp.concatenate([new[n_index:], new[0:n_index]])
-		u_new.append(new)
+for noise_level in [0.01, 0.05, 0.1]:
 
-		simple_new = jnp.concatenate([dt[n_index:], dt[0:n_index]])
-		u_simple_new.append(simple_new)
+	with h5py.File(f"data/{u0_idx}_noiseless.h5", "r") as f:
+		u = f["u"][:]
 
-	trj2 = jnp.stack(u_new)
-	trj = trj2.copy()
+		u_new = []
+		u_simple_new = []
+		for dt in u:
+			new = dt + noise_level*jnp.std(dt)*jax.random.normal(jax.random.PRNGKey(0),shape=dt.shape)
+			n_index = np.random.randint(0, dt.shape[0])
+			new = jnp.concatenate([new[n_index:], new[0:n_index]])
+			u_new.append(new)
 
-	trj3 = jnp.stack(u_simple_new)
-	trj_simple = trj3.copy()
+			simple_new = jnp.concatenate([dt[n_index:], dt[0:n_index]])
+			u_simple_new.append(simple_new)
 
-# save noisy data
-with h5py.File(f"data/2_noisy.h5", "w") as f:
-	f.create_dataset("u", data=trj)
+		trj2 = jnp.stack(u_new)
+		trj = trj2.copy()
+
+		trj3 = jnp.stack(u_simple_new)
+		trj_simple = trj3.copy()
+
+	# save noisy data
+	with h5py.File(f"data/{u0_idx}_noisy_{noise_level}.h5", "w") as f:
+		f.create_dataset("u", data=trj)
 	# f.create_dataset("x", data=f["x"][:])
 	# f.create_dataset("t", data=f["t"][:])
 
@@ -36,22 +41,19 @@ with h5py.File(f"data/2_noisy.h5", "w") as f:
 	# f.attrs["dt"] = f.attrs["dt"]
 	# f.attrs["n_steps"] = trj.shape[0]
 
-with h5py.File(f"data/2_translated.h5", "w") as f:
-	f.create_dataset("u", data=trj_simple)
-
 #Plot noisy data
-plt.figure(figsize=(20, 5))
-plt.imshow(
-	trj.T,
-	cmap="RdBu",
-	aspect="auto",
-	origin="lower",
-	extent=(0, trj.shape[0] * 0.1, 0, 100)
-)
-plt.colorbar(label="u")
-plt.xlabel("Time")
-plt.ylabel("Space")
-plt.title("Original Data, Translation and different Noise in each dt")
-plt.savefig("figures/2_noisy.png", dpi=300)
-#plt.show()
-plt.close()
+# plt.figure(figsize=(20, 5))
+# plt.imshow(
+# 	trj.T,
+# 	cmap="RdBu",
+# 	aspect="auto",
+# 	origin="lower",
+# 	extent=(0, trj.shape[0] * 0.1, 0, 100)
+# )
+# plt.colorbar(label="u")
+# plt.xlabel("Time")
+# plt.ylabel("Space")
+# plt.title("Original Data, Translation and different Noise in each dt")
+# plt.savefig("figures/5_noisy.png", dpi=300)
+# #plt.show()
+# plt.close()

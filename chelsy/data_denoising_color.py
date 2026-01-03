@@ -36,12 +36,11 @@ def find_shift_between_frames(frame1, frame2, search_range=None):
         similarity = -jnp.mean((frame2_shifted - frame1) / 0.1)
         
         # Або normalized cross-correlation (краще!)
-        # f1_centered = frame1 - jnp.mean(frame1)
-        # f2_centered = frame2_shifted - jnp.mean(frame2_shifted)
-        # similarity = jnp.sum(f1_centered * f2_centered) / (
-        #     jnp.sqrt(jnp.sum(f1_centered**2) * jnp.sum(f2_centered**2)) + 1e-10
-        # )
-        
+        f1_centered = frame1 - jnp.mean(frame1)
+        f2_centered = frame2_shifted - jnp.mean(frame2_shifted)
+        similarity = jnp.sum(f1_centered * f2_centered) / (
+            jnp.sqrt(jnp.sum(f1_centered**2) * jnp.sum(f2_centered**2)) + 1e-10
+        )
         
         if similarity > best_similarity:
             best_similarity = similarity
@@ -162,30 +161,35 @@ def compute_temporal_smoothness(trj):
 
 # ============= ГОЛОВНИЙ КОД =============
 
-# Завантажити дані
-with h5py.File('perturbed/10_data_simpletraslating.h5', 'r') as f:
-    trj_pert1 = jnp.array(f['u'][:])
+filename = '1_noisy_0.1'
 
+# Завантажити дані
+with h5py.File(f'data/{filename}.h5', 'r') as f:
+    trj_pert1 = jnp.array(f['u'][:])
 
 trj_restored1, shifts_rel1, shifts_abs1 = restore_by_temporal_coherence(
     trj_pert1,
     search_range=len(trj_pert1[0, :])//2,
-    use_forward_backward=False
+    use_forward_backward=True
 )
 
-# plot original data and denosed data
+# save denoised data
+with h5py.File(f"data/{filename}_denoised_color.h5", "w") as f:
+	f.create_dataset("u", data=trj_restored1)
+
+# plot original data and denoised data
 plt.figure(figsize=(20, 15))
 plt.subplot(3, 1, 1)
 plt.imshow(trj_pert1.T, aspect='auto', cmap='RdBu')
-plt.title("Original Data")
+plt.title(f"{filename} Data")
 
 plt.subplot(3, 1, 2)
 plt.imshow(trj_restored1.T, aspect='auto', cmap='RdBu')
-plt.title("Denoised Data")
+plt.title(f"Denoised {filename} Data")
 plt.tight_layout()
 
 plt.subplot(3, 1, 3)
-plt.imshow((trj_pert1-trj_restored1).T, aspect='auto', cmap='RdBu')
-plt.title("Difference")
+plt.imshow((abs(trj_pert1-trj_restored1)).T, aspect='auto', cmap='Reds')
+plt.title(f"Difference")
 plt.tight_layout()
 plt.show()
